@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vector Addition Interactive</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .controls {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        canvas {
+            background-color: #fff;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            cursor: crosshair;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button.active {
+            box-shadow: inset 0 0 0 2px #333;
+        }
+        #btn-tri { background-color: #e3f2fd; color: #0d47a1; }
+        #btn-para { background-color: #e8f5e9; color: #1b5e20; }
+        #btn-reset { background-color: #ffebee; color: #b71c1c; }
+        
+        .status {
+            margin-top: 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #333;
+            min-height: 24px;
+        }
+        .legend {
+            margin-top: 10px;
+            display: flex;
+            gap: 20px;
+            font-size: 0.9em;
+        }
+        .dot { height: 10px; width: 10px; display: inline-block; border-radius: 50%; margin-right: 5px; }
+    </style>
+</head>
+<body>
+
+    <h2>Vector Laws Interactive</h2>
+    
+    <div class="controls">
+        <span>Mode:</span>
+        <button id="btn-tri" onclick="setMode('triangle')" class="active">Triangle Law</button>
+        <button id="btn-para" onclick="setMode('parallelogram')">Parallelogram Law</button>
+        <button id="btn-reset" onclick="resetVectors()">Reset Vectors</button>
+    </div>
+
+    <canvas id="vectorCanvas" width="800" height="500"></canvas>
+    
+    <div class="status" id="statusText">Drag the Blue vector to the Red vector (Head to Tail).</div>
+
+    <div class="legend">
+        <span><span class="dot" style="background:blue;"></span>Vector A</span>
+        <span><span class="dot" style="background:red;"></span>Vector B</span>
+        <span><span class="dot" style="background:green;"></span>Resultant (R)</span>
+    </div>
+
+<script>
+    const canvas = document.getElementById('vectorCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusText = document.getElementById('statusText');
+
+    // Configuration
+    const SNAP_DIST = 25;
+    let currentMode = 'triangle'; // 'triangle' or 'parallelogram'
+
+    // Vector State
+    // Each vector has a tail (x,y) and a head (x,y)
+    let vecA = { tail: {x: 100, y: 300}, head: {x: 250, y: 200}, color: 'blue', label: 'A' };
+    let vecB = { tail: {x: 400, y: 300}, head: {x: 400, y: 150}, color: 'red', label: 'B' };
+
+    // Dragging State
+    let dragTarget = null; // 'A_tail', 'A_head', 'B_tail', 'B_head'
+    let dragOffset = {x:0, y:0};
+
+    // Mouse Event Listeners
+    canvas.addEventListener('mousedown', onMouseDown);
+    canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('mouseup', onMouseUp);
+    
+    // Touch support
+    canvas.addEventListener('touchstart', (e) => {
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent("mousedown", {
+            clientX: touch.clientX, clientY: touch.clientY
+        });
+        canvas.dispatchEvent(mouseEvent);
+    }, false);
+    canvas.addEventListener('touchmove', (e) => {
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent("mousemove", {
+            clientX: touch.clientX, clientY: touch.clientY
+        });
+        canvas.dispatchEvent(mouseEvent);
+        e.preventDefault(); // Prevent scrolling
+    }, false);
+    canvas.addEventListener('touchend', () => {
+        const mouseEvent = new MouseEvent("mouseup", {});
+        canvas.dispatchEvent(mouseEvent);
+    }, false);
+
+
+    function setMode(mode) {
+        currentMode = mode;
+        document.getElementById('btn-tri').classList.toggle('active', mode === 'triangle');
+        document.getElementById('btn-para').classList.toggle('active', mode === 'parallelogram');
+        
+        // Separate vectors slightly to force re-engagement
+        vecB.tail.x += 30;
+        vecB.head.x += 30;
+        
+        updateStatus();
+        draw();
+    }
+
+    function resetVectors() {
+        vecA = { tail: {x: 100, y: 300}, head: {x: 250, y: 200}, color: 'blue', label: 'A' };
+        vecB = { tail: {x: 400, y: 300}, head: {x: 400, y: 150}, color: 'red', label: 'B' };
+        draw();
+        updateStatus();
+    }
+
+    function updateStatus() {
+        if (checkSnap()) {
+            statusText.innerHTML = "Law Applied! Resultant vector shown in Green.";
+            statusText.style.color = "green";
+        } else {
+            statusText.style.color = "#333";
+            if (currentMode === 'triangle') {
+                statusText.innerHTML = "Drag Vector B's Tail to Vector A's Head (or vice versa).";
+            } else {
+                statusText.innerHTML = "Drag Vector B's Tail to Vector A's Tail.";
+            }
+        }
+    }
+
+    // Math Helpers
+    function dist(p1, p2) {
+        return Math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2);
+    }
+
+    function getMousePos(evt) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: evt.clientX - rect.left,
+            y: evt.clientY - rect.top
+        };
+    }
+
+    function checkSnap() {
+        if (currentMode === 'triangle') {
+            // Tail B to Head A OR Tail A to Head B
+            if (dist(vecA.head, vecB.tail) < SNAP_DIST) return { type: 'AB', anchor: vecA.head };
+            if (dist(vecB.head, vecA.tail) < SNAP_DIST) return { type: 'BA', anchor: vecB.head };
+        } else {
+            // Tail A to Tail B
+            if (dist(vecA.tail, vecB.tail) < SNAP_DIST) return { type: 'Tails', anchor: vecA.tail };
+        }
+        return false;
+    }
+
+    // Drawing Functions
+    function drawGrid() {
+        ctx.beginPath();
+        ctx.strokeStyle = '#eee';
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= canvas.width; x += 50) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
+        for (let y = 0; y <= canvas.height; y += 50) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
+        ctx.stroke();
+    }
+
+    function drawArrow(from, to, color, label, isDashed = false) {
+        const headlen = 15; 
+        const angle = Math.atan2(to.y - from.y, to.x - from.x);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        if (isDashed) ctx.setLineDash([5, 5]);
+        ctx.stroke();
+
+        // Arrowhead
+        ctx.beginPath();
+        ctx.moveTo(to.x, to.y);
+        ctx.lineTo(to.x - headlen * Math.cos(angle - Math.PI / 6), to.y - headlen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(to.x - headlen * Math.cos(angle + Math.PI / 6), to.y - headlen * Math.sin(angle + Math.PI / 6));
+        ctx.lineTo(to.x, to.y);
+        ctx.fillStyle = color;
+        ctx.setLineDash([]);
+        ctx.fill();
+
+        // Label
+        if (label) {
+            ctx.fillStyle = 'black';
+            ctx.font = "bold 16px Arial";
+            ctx.fillText(label, (from.x + to.x)/2 + 10, (from.y + to.y)/2 - 10);
+        }
+        ctx.restore();
+
+        // Draw drag handles
+        if (!isDashed) {
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath(); ctx.arc(from.x, from.y, 5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(to.x, to.y, 5, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGrid();
+
+        const snap = checkSnap();
+
+        // Draw Ghost/Resultant logic
+        if (snap) {
+            if (currentMode === 'triangle') {
+                // Draw Resultant
+                const start = (snap.type === 'AB') ? vecA.tail : vecB.tail;
+                const end = (snap.type === 'AB') ? vecB.head : vecA.head;
+                
+                // Visual feedback: Snap the vector visually
+                if(dragTarget === null) { // Only snap hard when not dragging
+                    if(snap.type === 'AB') {
+                        let dx = vecB.head.x - vecB.tail.x;
+                        let dy = vecB.head.y - vecB.tail.y;
+                        vecB.tail = {x: vecA.head.x, y: vecA.head.y};
+                        vecB.head = {x: vecB.tail.x + dx, y: vecB.tail.y + dy};
+                    }
+                }
+
+                drawArrow(start, end, 'green', 'A + B');
+            } 
+            else if (currentMode === 'parallelogram') {
+                // Snap tails
+                if(dragTarget === null) {
+                    let dx = vecB.head.x - vecB.tail.x;
+                    let dy = vecB.head.y - vecB.tail.y;
+                    vecB.tail = {x: vecA.tail.x, y: vecA.tail.y};
+                    vecB.head = {x: vecB.tail.x + dx, y: vecB.tail.y + dy};
+                }
+
+                // Calculate resultant tip
+                const resX = vecA.tail.x + (vecA.head.x - vecA.tail.x) + (vecB.head.x - vecB.tail.x);
+                const resY = vecA.tail.y + (vecA.head.y - vecA.tail.y) + (vecB.head.y - vecB.tail.y);
+                
+                // Draw dashed parallel lines
+                drawArrow(vecA.head, {x: resX, y: resY}, 'rgba(255,0,0,0.3)', '', true);
+                drawArrow(vecB.head, {x: resX, y: resY}, 'rgba(0,0,255,0.3)', '', true);
+                
+                // Draw Resultant (Diagonal)
+                drawArrow(vecA.tail, {x: resX, y: resY}, 'green', 'A + B');
+            }
+        }
+
+        drawArrow(vecA.tail, vecA.head, vecA.color, 'A');
+        drawArrow(vecB.tail, vecB.head, vecB.color, 'B');
+    }
+
+    // Interaction Handlers
+    function onMouseDown(e) {
+        const pos = getMousePos(e);
+        const handleRadius = 15;
+
+        // Check heads first (changing direction/magnitude)
+        if (dist(pos, vecA.head) < handleRadius) dragTarget = 'A_head';
+        else if (dist(pos, vecB.head) < handleRadius) dragTarget = 'B_head';
+        // Check tails (moving vector)
+        else if (dist(pos, vecA.tail) < handleRadius) dragTarget = 'A_tail';
+        else if (dist(pos, vecB.tail) < handleRadius) dragTarget = 'B_tail';
+        else return;
+
+        // Store offset to prevent jumping
+        let targetPoint = (dragTarget === 'A_head') ? vecA.head : 
+                          (dragTarget === 'B_head') ? vecB.head :
+                          (dragTarget === 'A_tail') ? vecA.tail : vecB.tail;
+        
+        dragOffset.x = pos.x - targetPoint.x;
+        dragOffset.y = pos.y - targetPoint.y;
+    }
+
+    function onMouseMove(e) {
+        if (!dragTarget) return;
+        const pos = getMousePos(e);
+        const newX = pos.x - dragOffset.x;
+        const newY = pos.y - dragOffset.y;
+
+        if (dragTarget === 'A_head') {
+            vecA.head.x = newX; vecA.head.y = newY;
+        } else if (dragTarget === 'B_head') {
+            vecB.head.x = newX; vecB.head.y = newY;
+        } else if (dragTarget === 'A_tail') {
+            const dx = vecA.head.x - vecA.tail.x;
+            const dy = vecA.head.y - vecA.tail.y;
+            vecA.tail.x = newX; vecA.tail.y = newY;
+            vecA.head.x = newX + dx; vecA.head.y = newY + dy;
+        } else if (dragTarget === 'B_tail') {
+            const dx = vecB.head.x - vecB.tail.x;
+            const dy = vecB.head.y - vecB.tail.y;
+            vecB.tail.x = newX; vecB.tail.y = newY;
+            vecB.head.x = newX + dx; vecB.head.y = newY + dy;
+        }
+
+        draw();
+        updateStatus();
+    }
+
+    function onMouseUp() {
+        dragTarget = null;
+        draw(); // Triggers final snap if close enough
+        updateStatus();
+    }
+
+    // Initial Draw
+    draw();
+
+</script>
+</body>
+</html>
