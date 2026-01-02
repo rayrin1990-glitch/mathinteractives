@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collinearity & Line Production</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; background: #f4f7f6; color: #333; margin: 0; padding: 20px; }
+        .container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 800px; width: 100%; }
+        canvas { background: #fafafa; border: 1px solid #ddd; cursor: crosshair; display: block; margin: 0 auto; border-radius: 4px; }
+        .controls { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .panel { padding: 15px; border: 1px solid #eee; border-radius: 8px; }
+        .status { font-size: 1.1rem; font-weight: bold; padding: 10px; margin-bottom: 10px; border-radius: 6px; text-align: center; }
+        .collinear { background: #e6fffa; color: #2c7a7b; border: 1px solid #81e6d9; }
+        .not-collinear { background: #fff5f5; color: #c53030; border: 1px solid #feb2b2; }
+        .legend-item { display: flex; align-items: center; margin: 5px 0; font-size: 0.9rem; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        code { background: #edf2f7; padding: 2px 5px; border-radius: 4px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Collinearity & "Produced" Lines</h1>
+    
+    <div id="statusBox" class="status not-collinear">Points are not collinear</div>
+
+    <canvas id="canvas" width="700" height="350"></canvas>
+
+    <div class="controls">
+        <div class="panel">
+            <h3>Visual Guide</h3>
+            <div class="legend-item"><div class="dot" style="background: #3182ce;"></div> Segment AB (The start)</div>
+            <div class="legend-item"><div class="dot" style="background: #ed8936;"></div> AB produced (Extension past B)</div>
+            <div class="legend-item"><div class="dot" style="background: #9f7aea;"></div> BA produced (Extension past A)</div>
+            <p><small>Drag points A, B, or C to explore.</small></p>
+        </div>
+        <div class="panel">
+            <h3>Current State</h3>
+            <p id="c-pos">Point C is: <b>Floating</b></p>
+            <p id="math-area">Triangle Area: 0</p>
+        </div>
+    </div>
+
+    <div class="panel" style="margin-top: 20px;">
+        <h3>What does "Produced" mean?</h3>
+        <p>In geometry, <b>producing</b> a line means extending a line segment in a specific direction:</p>
+        <ul>
+            <li><b>AB produced:</b> Start at A, go through B, and keep going. Point C lies on this if it's "beyond" B.</li>
+            <li><b>BA produced:</b> Start at B, go through A, and keep going. Point C lies on this if it's "beyond" A.</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusBox = document.getElementById('statusBox');
+    const cPosText = document.getElementById('c-pos');
+    const mathAreaText = document.getElementById('math-area');
+
+    let points = [
+        { x: 200, y: 200, label: 'A', color: '#3182ce' },
+        { x: 400, y: 200, label: 'B', color: '#3182ce' },
+        { x: 500, y: 100, label: 'C', color: '#e53e3e' }
+    ];
+
+    let draggingPoint = null;
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const A = points[0], B = points[1], C = points[2];
+
+        // 1. Calculations
+        const area = 0.5 * Math.abs(A.x * (B.y - C.y) + B.x * (C.y - A.y) + C.x * (A.y - B.y));
+        const isCollinear = area < 600; // Tolerance
+
+        // Vectors for projection
+        const ABx = B.x - A.x;
+        const ABy = B.y - A.y;
+        const ACx = C.x - A.x;
+        const ACy = C.y - A.y;
+        
+        // Dot product to find position of C relative to A and B
+        const dotProd = ACx * ABx + ACy * ABy;
+        const abLenSq = ABx * ABx + ABy * ABy;
+        const t = dotProd / abLenSq; // parameter along the line AB
+
+        // 2. Draw "Production" Lines
+        const angle = Math.atan2(B.y - A.y, B.x - A.x);
+        
+        // AB Produced (Past B)
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = '#ed8936';
+        ctx.lineWidth = 2;
+        ctx.moveTo(B.x, B.y);
+        ctx.lineTo(B.x + Math.cos(angle) * 1000, B.y + Math.sin(angle) * 1000);
+        ctx.stroke();
+
+        // BA Produced (Past A)
+        ctx.beginPath();
+        ctx.strokeStyle = '#9f7aea';
+        ctx.moveTo(A.x, A.y);
+        ctx.lineTo(A.x - Math.cos(angle) * 1000, A.y - Math.sin(angle) * 1000);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 3. Draw Segment AB
+        ctx.beginPath();
+        ctx.strokeStyle = '#3182ce';
+        ctx.lineWidth = 4;
+        ctx.moveTo(A.x, A.y);
+        ctx.lineTo(B.x, B.y);
+        ctx.stroke();
+
+        // 4. Update UI
+        mathAreaText.innerHTML = `Triangle Area: <b>${Math.round(area)}</b>`;
+        
+        if (isCollinear) {
+            statusBox.textContent = "POINTS ARE COLLINEAR";
+            statusBox.className = "status collinear";
+            
+            if (t > 1.05) {
+                cPosText.innerHTML = "Point C is on <b>AB produced</b> (past B)";
+            } else if (t < -0.05) {
+                cPosText.innerHTML = "Point C is on <b>BA produced</b> (past A)";
+            } else {
+                cPosText.innerHTML = "Point C is <b>between</b> A and B";
+            }
+        } else {
+            statusBox.textContent = "Points are not collinear";
+            statusBox.className = "status not-collinear";
+            cPosText.innerHTML = "Point C is <b>floating</b> (forms a triangle)";
+        }
+
+        // 5. Draw Points
+        points.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.shadowBlur = 4; ctx.shadowColor = "rgba(0,0,0,0.2)";
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = "black";
+            ctx.font = "bold 14px sans-serif";
+            ctx.fillText(p.label, p.x + 15, p.y - 15);
+        });
+    }
+
+    canvas.addEventListener('mousedown', e => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        points.forEach(p => {
+            if (Math.hypot(p.x - mx, p.y - my) < 20) draggingPoint = p;
+        });
+    });
+
+    window.addEventListener('mousemove', e => {
+        if (draggingPoint) {
+            const rect = canvas.getBoundingClientRect();
+            draggingPoint.x = e.clientX - rect.left;
+            draggingPoint.y = e.clientY - rect.top;
+            draw();
+        }
+    });
+
+    window.addEventListener('mouseup', () => draggingPoint = null);
+    draw();
+</script>
+</body>
+</html>
