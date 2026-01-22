@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vector Ratio Theorem: Full Position Vectors</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f8fafc; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 900px; width: 100%; }
+        canvas { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; cursor: crosshair; display: block; margin: 0 auto; }
+        
+        .controls { background: #f1f5f9; padding: 20px; border-radius: 12px; margin-top: 20px; text-align: center; }
+        .slider-label { font-size: 1.3rem; margin-bottom: 15px; display: block; font-weight: bold; }
+        input[type="range"] { width: 80%; cursor: pointer; height: 12px; }
+
+        .math-box { background: #0f172a; color: #f8fafc; padding: 25px; border-radius: 12px; margin-top: 20px; font-family: 'Times New Roman', serif; display: flex; align-items: center; justify-content: center; gap: 20px; }
+        .fraction { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; }
+        .numerator { border-bottom: 2px solid #38bdf8; padding: 2px 10px; font-size: 1.4rem; }
+        .denominator { padding: 2px 10px; font-size: 1.4rem; }
+        .equals { font-size: 1.8rem; color: #38bdf8; }
+        .p-vec { font-size: 1.8rem; font-weight: bold; color: #ef4444; }
+        
+        .color-a { color: #10b981; font-weight: bold; } 
+        .color-b { color: #3b82f6; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="margin-top:0">Full Position Vector Visualization</h2>
+    <p>Showing how <b>OA (a)</b> and <b>OB (b)</b> combine to form <b>OP (p)</b>.</p>
+    
+    <canvas id="canvas" width="800" height="420"></canvas>
+
+    <div class="controls">
+        <span class="slider-label">
+            Ratio <span style="color:#f59e0b">m (AP)</span> = <span id="mText">3</span> | 
+            Ratio <span style="color:#8b5cf6">n (PB)</span> = <span id="nText">7</span>
+        </span>
+        <input type="range" id="ratioSlider" min="0" max="10" step="1" value="3">
+    </div>
+
+    <div class="math-box">
+        <span class="p-vec">p</span> 
+        <span class="equals">=</span>
+        <div class="fraction">
+            <div class="numerator">
+                <span style="color:#8b5cf6" id="formulaN">7</span><span class="color-a">a</span> + 
+                <span style="color:#f59e0b" id="formulaM">3</span><span class="color-b">b</span>
+            </div>
+            <div class="denominator">
+                <span id="formulaDenom">10</span>
+            </div>
+        </div>
+        <div style="margin-left: 20px; border-left: 1px solid #334155; padding-left: 20px;">
+            <div id="finalResult" style="font-size: 1.2rem; color: #38bdf8;">p = 0.7a + 0.3b</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const slider = document.getElementById('ratioSlider');
+
+    const O = { x: 80, y: 380 }; 
+    let A = { x: 180, y: 80 };   
+    let B = { x: 700, y: 250 };  
+    let dragging = null;
+
+    function drawArrow(from, to, color, width = 3, label = "") {
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+
+        const headlen = 10;
+        const angle = Math.atan2(to.y - from.y, to.x - from.x);
+        ctx.beginPath();
+        ctx.moveTo(to.x, to.y);
+        ctx.lineTo(to.x - headlen * Math.cos(angle - 0.4), to.y - headlen * Math.sin(angle - 0.4));
+        ctx.lineTo(to.x - headlen * Math.cos(angle + 0.4), to.y - headlen * Math.sin(angle + 0.4));
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        if (label) {
+            ctx.fillStyle = color;
+            ctx.font = "italic 16px serif";
+            ctx.fillText(label, (from.x + to.x)/2 - 10, (from.y + to.y)/2 - 10);
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const m = parseInt(slider.value); 
+        const n = 10 - m;                
+        const weightA = n / 10;
+        const weightB = m / 10;
+
+        document.getElementById('mText').innerText = m;
+        document.getElementById('nText').innerText = n;
+        document.getElementById('formulaN').innerText = n;
+        document.getElementById('formulaM').innerText = m;
+        document.getElementById('finalResult').innerText = `p = ${weightA.toFixed(1)}a + ${weightB.toFixed(1)}b`;
+
+        const P = {
+            x: (n * A.x + m * B.x) / 10,
+            y: (n * A.y + m * B.y) / 10
+        };
+
+        // 1. Draw Full Position Vectors OA and OB (Faded Background)
+        drawArrow(O, A, "rgba(16, 185, 129, 0.3)", 2, "a");
+        drawArrow(O, B, "rgba(59, 130, 246, 0.3)", 2, "b");
+
+        // 2. Physical line segment AB
+        ctx.beginPath();
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = "#f59e0b"; // AP
+        ctx.moveTo(A.x, A.y); ctx.lineTo(P.x, P.y); ctx.stroke();
+        ctx.beginPath();
+        ctx.strokeStyle = "#8b5cf6"; // PB
+        ctx.moveTo(P.x, P.y); ctx.lineTo(B.x, B.y); ctx.stroke();
+
+        // 3. Components Path (The "Recipe" buildup)
+        const compA = { 
+            x: O.x + weightA * (A.x - O.x), 
+            y: O.y + weightA * (A.y - O.y) 
+        };
+        
+        // Green component (scaling of a)
+        if (n > 0) {
+            drawArrow(O, compA, "#10b981", 5);
+            ctx.fillStyle = "#10b981";
+            ctx.font = "bold 12px sans-serif";
+            ctx.fillText(`${n}/10 a`, compA.x - 20, compA.y - 15);
+        }
+
+        // Blue component (scaling of b) - drawn tip-to-tail
+        if (m > 0) {
+            drawArrow(compA, P, "#3b82f6", 5);
+            ctx.fillStyle = "#3b82f6";
+            ctx.fillText(`${m}/10 b`, (compA.x + P.x)/2 + 10, (compA.y + P.y)/2);
+        }
+
+        // 4. Resultant OP
+        drawArrow(O, P, "#ef4444", 3, "p");
+
+        // 5. Points and Labels
+        ctx.fillStyle = "#000";
+        ctx.font = "bold 16px sans-serif";
+        [[O, "O"], [A, "A"], [B, "B"], [P, "P"]].forEach(item => {
+            const [pt, label] = item;
+            ctx.beginPath(); ctx.arc(pt.x, pt.y, 6, 0, 7); ctx.fill();
+            ctx.fillText(label, pt.x + 12, pt.y - 12);
+        });
+    }
+
+    canvas.onmousedown = e => {
+        const r = canvas.getBoundingClientRect();
+        const mx = e.clientX - r.left, my = e.clientY - r.top;
+        if (Math.hypot(A.x-mx, A.y-my) < 25) dragging = A;
+        else if (Math.hypot(B.x-mx, B.y-my) < 25) dragging = B;
+    };
+    window.onmousemove = e => {
+        if (dragging) {
+            const r = canvas.getBoundingClientRect();
+            dragging.x = e.clientX - r.left; dragging.y = e.clientY - r.top;
+            draw();
+        }
+    };
+    window.onmouseup = () => dragging = null;
+    slider.oninput = draw;
+    draw();
+</script>
+</body>
+</html>
