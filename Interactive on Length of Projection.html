@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Vector Projection - The Unit Ruler</title>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; background-color: #0d0d0d; color: #e0e0e0; }
+        
+        #ui { 
+            position: absolute; top: 20px; left: 20px; z-index: 10; 
+            background: rgba(25, 25, 25, 0.96); padding: 25px; 
+            border-radius: 12px; border: 1px solid #444; width: 360px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        #explainer { 
+            font-size: 0.9em; line-height: 1.5; color: #bbb; 
+            margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #333;
+        }
+        #explainer b { color: #fff; }
+
+        /* Formula Fraction Styling */
+        .formula-container { 
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 1.4em; margin: 15px 0; min-height: 70px;
+            font-family: "Times New Roman", serif; font-style: italic;
+        }
+        .fraction { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 5px; }
+        .fraction .top { border-bottom: 2px solid white; padding: 0 5px; }
+        .fraction .bottom { padding: 0 5px; }
+
+        .math-block { background: #1a1a1a; padding: 15px; border-radius: 8px; border-left: 5px solid #4ae288; }
+        .val-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.95em; }
+        .val { font-family: 'Courier New', monospace; font-weight: bold; color: #4ae288; }
+        
+        .slider-group { margin-bottom: 18px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 0.8em; color: #999; margin-bottom: 6px; }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #4a90e2; }
+        
+        button { 
+            background: #4a90e2; color: white; border: none; padding: 14px; width: 100%; 
+            border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.9em;
+            transition: 0.2s; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        button:hover { background: #357abd; }
+        button.active { background: #4ae288; color: #000; }
+        
+        .vector-a { color: #4a90e2; }
+        .vector-b { color: #ff4d4d; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <h3 style="margin-top:0; color: #fff;">Projection Length</h3>
+    
+    <div id="explainer">
+        We put the <b>"Hat"</b> on <b>B</b> to make it a unit ruler. If <b>A</b> and <b>B</b> point away from each other, we use the modulus <b>| |</b> to keep length positive.
+    </div>
+
+    <div class="slider-group">
+        <div class="slider-label"><span>Object <span class="vector-a">Vector A</span> (X-Axis)</span><span id="labelA">4.0</span></div>
+        <input type="range" id="xA" min="-8" max="8" step="0.1" value="4">
+        
+        <div class="slider-label"><span>Floor <span class="vector-b">Vector B</span> (X-Axis)</span><span id="labelB">6.0</span></div>
+        <input type="range" id="xB" min="-10" max="10" step="0.1" value="6">
+    </div>
+
+    <button id="hatBtn">Set Magnitude |B| = 1</button>
+
+    <div class="formula-container" id="formulaDisplay">
+        <!-- Dynamic Formula -->
+    </div>
+
+    <div class="math-block">
+        <div class="val-row" style="border-bottom: 1px solid #333; margin-bottom: 10px; padding-bottom: 5px;">
+            <span>Result Length:</span>
+            <span class="val" id="resLen">0.00</span>
+        </div>
+        <div class="val-row">
+            <span>Raw Dot Product |A·B|:</span>
+            <span id="resDot" style="color:#bbb">0.00</span>
+        </div>
+        <div class="val-row">
+            <span>Ruler Scale |B|:</span>
+            <span id="resMagB" style="color:#ff4d4d; font-weight:bold;">6.00</span>
+        </div>
+    </div>
+</div>
+
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    camera.position.set(2, 6, 11);
+    controls.update();
+
+    scene.add(new THREE.GridHelper(20, 20, 0x222222, 0x222222));
+
+    // Vector Visuals
+    const arrowA = new THREE.ArrowHelper(new THREE.Vector3(), new THREE.Vector3(), 1, 0x4a90e2, 0.4, 0.2);
+    const arrowB = new THREE.ArrowHelper(new THREE.Vector3(), new THREE.Vector3(), 1, 0xff4d4d, 0.4, 0.2);
+    const arrowProj = new THREE.ArrowHelper(new THREE.Vector3(), new THREE.Vector3(), 1, 0x4ae288, 0.3, 0.15);
+    const dottedLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({color:0xffffff, dashSize:0.2, gapSize:0.1}));
+    
+    scene.add(arrowA, arrowB, arrowProj, dottedLine);
+
+    let isHatMode = false;
+
+    function update() {
+        let xA = parseFloat(document.getElementById('xA').value);
+        let xB = parseFloat(document.getElementById('xB').value);
+        if (Math.abs(xB) < 0.1) xB = 0.1; // Safety
+
+        const vecA = new THREE.Vector3(xA, 3, 0);
+        let vecB = new THREE.Vector3(xB, 0, 0);
+        let currentMagB = Math.abs(xB);
+        
+        const formulaDiv = document.getElementById('formulaDisplay');
+        const hatBtn = document.getElementById('hatBtn');
+
+        if (isHatMode) {
+            const direction = xB >= 0 ? 1 : -1;
+            vecB.set(direction, 0, 0); // Normalized
+            currentMagB = 1.0;
+            hatBtn.classList.add('active');
+            hatBtn.innerText = "Magnitude |B| is 1 (Hat On)";
+            formulaDiv.innerHTML = `Length = | <span class="vector-a">A</span> · <span class="vector-b">b̂</span> |`;
+        } else {
+            hatBtn.classList.remove('active');
+            hatBtn.innerText = "Set Magnitude |B| = 1";
+            formulaDiv.innerHTML = `
+                Length = 
+                <div class="fraction">
+                    <div class="top">| <span class="vector-a">A</span> · <span class="vector-b">B</span> |</div>
+                    <div class="bottom">| <span class="vector-b">B</span> |</div>
+                </div>
+            `;
+        }
+
+        // Update 3D
+        arrowA.setDirection(vecA.clone().normalize());
+        arrowA.setLength(vecA.length());
+        
+        arrowB.setDirection(vecB.clone().normalize());
+        arrowB.setLength(Math.abs(vecB.x));
+
+        // Math
+        const bHat = vecB.clone().normalize();
+        const scalarProj = vecA.dot(bHat);
+        const finalLength = Math.abs(scalarProj);
+
+        // Green Projection Arrow
+        if (finalLength > 0.1) {
+            arrowProj.visible = true;
+            arrowProj.setDirection(bHat.clone().multiplyScalar(scalarProj >= 0 ? 1 : -1));
+            arrowProj.setLength(finalLength);
+        } else { arrowProj.visible = false; }
+
+        // Shadow Line
+        const tipProj = bHat.clone().multiplyScalar(scalarProj);
+        dottedLine.geometry.setFromPoints([vecA, tipProj]);
+        dottedLine.computeLineDistances();
+
+        // UI Updates
+        document.getElementById('labelA').innerText = xA.toFixed(1);
+        document.getElementById('labelB').innerText = xB.toFixed(1);
+        document.getElementById('resLen').innerText = finalLength.toFixed(2);
+        
+        // Show absolute dot product as per the numerator in the UI formula
+        const rawDotProduct = Math.abs(vecA.dot(new THREE.Vector3(xB, 0, 0)));
+        document.getElementById('resDot').innerText = rawDotProduct.toFixed(2);
+        document.getElementById('resMagB').innerText = currentMagB.toFixed(2);
+    }
+
+    document.getElementById('xA').oninput = update;
+    document.getElementById('xB').oninput = update;
+    document.getElementById('hatBtn').onclick = () => { isHatMode = !isHatMode; update(); };
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+    update();
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>
