@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Direction & The Unit Vector - Projection Lesson</title>
+    <title>Length of projection of a onto b</title>
     <style>
         body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; background-color: #0d0d0d; color: #e0e0e0; display: flex; }
         
@@ -12,7 +12,7 @@
             width: 400px; height: 100vh; background: #151515; border-right: 1px solid #333; 
             padding: 30px; box-sizing: border-box; overflow-y: auto; z-index: 20;
         }
-        #canvas-container { flex-grow: 1; position: relative; }
+        #canvas-container { flex-grow: 1; position: relative; overflow: hidden; height: 100vh; }
 
         /* Typography */
         h2 { color: #fff; margin-top: 0; font-weight: 300; }
@@ -46,13 +46,24 @@
         }
         button.active { background: #4ae288; color: #000; }
 
-        .result-text { font-family: monospace; color: #4ae288; font-size: 1.2em; font-weight: bold; }
+        .result-text { font-family: monospace; color: #4ae288; font-size: 1.4em; font-weight: bold; }
+
+        /* Labels for Canvas */
+        .vector-label {
+            position: absolute;
+            pointer-events: none;
+            font-weight: bold;
+            font-size: 1.3em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            transform: translate(-50%, -50%);
+            display: none; /* Hidden until positioned */
+        }
     </style>
 </head>
 <body>
 
 <div id="lesson-panel">
-    <h2>The Concept of Direction</h2>
+    <h2>Length of projection of <b>a</b> onto <b>b</b></h2>
     
     <div class="narrative">
         Projection is not about which formula you remember. <br>
@@ -61,7 +72,7 @@
 
     <div class="step-box active">
         <b>The Central Question:</b><br>
-        “How much of <span class="highlight-a">vector a</span> lies <span class="emphasis">in the direction of</span> <span class="highlight-b">vector b</span>?”
+        “How much of vector <span class="highlight-a">a</span> lies <span class="emphasis">in the direction of</span> vector <span class="highlight-b">b</span>?”
     </div>
 
     <div class="narrative" style="font-size: 0.85em;">
@@ -74,31 +85,35 @@
             Length = | <span class="highlight-a">a</span> · <span class="highlight-b">b̂</span> |
         </div>
         <div style="font-size: 0.8em; color: #888; text-align: center;" id="formulaSubtext">
-            (Where b̂ = b / |b|)
+            (Where <b>b̂</b> = <b>b</b> / |<b>b</b>|)
         </div>
     </div>
 
     <div class="controls">
-        <label style="font-size: 0.8em; color: #888;">Adjust Vector A (Object)</label>
+        <label style="font-size: 0.9em; color: #bbb;">Adjust Vector <b>a</b></label>
         <input type="range" id="xA" min="-8" max="8" step="0.1" value="4">
         
-        <label style="font-size: 0.8em; color: #888; margin-top: 10px; display: block;">Adjust Vector B (Direction)</label>
+        <label style="font-size: 0.9em; color: #bbb; margin-top: 10px; display: block;">Adjust Vector <b>b</b></label>
         <input type="range" id="xB" min="-10" max="10" step="0.1" value="6">
 
-        <button id="hatBtn">Set Magnitude |B| = 1</button>
+        <button id="hatBtn">Set Magnitude |<b>b</b>| = 1</button>
     </div>
 
     <div style="margin-top: 20px; padding: 15px; background: #000; border-radius: 8px;">
-        <div style="font-size: 0.8em; color: #888;">MEASUREMENT:</div>
+        <div style="font-size: 0.7em; color: #888; letter-spacing: 0.05em; line-height: 1.2;">LENGTH OF PROJECTION OF <b>a</b> ONTO <b>b</b>:</div>
         <div class="result-text" id="finalLength">0.00</div>
-        <div style="font-size: 0.75em; color: #666; margin-top: 5px;">
-            Raw Dot Product |a·b|: <span id="resDot">0.00</span><br>
-            Current Ruler Length |b|: <span id="resMagB">6.00</span>
+        <hr style="border: 0; border-top: 1px solid #222; margin: 10px 0;">
+        <div style="font-size: 0.75em; color: #666; line-height: 1.5;">
+            Raw Dot Product |<b>a</b>·<b>b</b>|: <span id="resDot" style="color: #bbb;">0.00</span><br>
+            Current Ruler Length |<b>b</b>|: <span id="resMagB" style="color: #bbb;">6.00</span>
         </div>
     </div>
 </div>
 
-<div id="canvas-container"></div>
+<div id="canvas-container">
+    <div id="label-a" class="vector-label" style="color: #4a90e2;">a</div>
+    <div id="label-b" class="vector-label" style="color: #ff4d4d;">b</div>
+</div>
 
 <script type="importmap">
     {
@@ -113,12 +128,23 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+    // Global App State
+    const state = {
+        isHatMode: false,
+        vecA: new THREE.Vector3(4, 3, 0),
+        vecB: new THREE.Vector3(6, 0, 0),
+        currentMagB: 6
+    };
+
     // Setup
     const container = document.getElementById('canvas-container');
+    const labelA = document.getElementById('label-a');
+    const labelB = document.getElementById('label-b');
+    
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / window.innerHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.clientWidth, window.innerHeight);
+    renderer.setSize(container.clientWidth, container.clientHeight);
     container.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -127,39 +153,69 @@
 
     scene.add(new THREE.GridHelper(20, 20, 0x222222, 0x222222));
 
-    // Vectors
-    const arrowA = new THREE.ArrowHelper(new THREE.Vector3(), new THREE.Vector3(), 1, 0x4a90e2, 0.4, 0.2);
-    const arrowB = new THREE.ArrowHelper(new THREE.Vector3(), new THREE.Vector3(), 1, 0xff4d4d, 0.4, 0.2);
-    const arrowProj = new THREE.ArrowHelper(new THREE.Vector3(), new THREE.Vector3(), 1, 0x4ae288, 0.3, 0.15);
-    const dottedLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({color:0xffffff, dashSize:0.2, gapSize:0.1}));
+    // Arrows
+    const arrowA = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1, 0x4a90e2, 0.4, 0.2);
+    const arrowB = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1, 0xff4d4d, 0.4, 0.2);
+    const arrowProj = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1, 0x4ae288, 0.3, 0.15);
+    
+    // Dotted Line Setup
+    const dottedLineGeo = new THREE.BufferGeometry();
+    const dottedLineMat = new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.2, gapSize: 0.1 });
+    const dottedLine = new THREE.Line(dottedLineGeo, dottedLineMat);
+    
     scene.add(arrowA, arrowB, arrowProj, dottedLine);
 
-    let isHatMode = false;
+    function updateLabels() {
+        const vectors = [
+            { v: state.vecA, el: labelA },
+            { v: state.vecB, el: labelB }
+        ];
 
-    function update() {
+        vectors.forEach(item => {
+            const projected = item.v.clone().project(camera);
+            
+            // Convert projected coordinates to CSS pixels
+            const x = (projected.x * 0.5 + 0.5) * container.clientWidth;
+            const y = (-(projected.y * 0.5 - 0.5) * container.clientHeight);
+            
+            item.el.style.left = `${x}px`;
+            item.el.style.top = `${y}px`;
+            
+            // Visibility check (is it in front of the camera?)
+            if (projected.z < 1 && projected.x > -1 && projected.x < 1 && projected.y > -1 && projected.y < 1) {
+                item.el.style.display = 'block';
+            } else {
+                item.el.style.display = 'none';
+            }
+        });
+    }
+
+    function calculate() {
         let xA = parseFloat(document.getElementById('xA').value);
         let xB = parseFloat(document.getElementById('xB').value);
-        if (Math.abs(xB) < 0.1) xB = xB >= 0 ? 0.1 : -0.1;
+        
+        // Safety: Prevent zero direction for b
+        if (Math.abs(xB) < 0.05) xB = xB >= 0 ? 0.05 : -0.05;
 
-        const vecA = new THREE.Vector3(xA, 3, 0);
-        let vecB = new THREE.Vector3(xB, 0, 0);
-        let currentMagB = Math.abs(xB);
+        state.vecA.set(xA, 3, 0);
+        state.vecB.set(xB, 0, 0);
+        state.currentMagB = Math.abs(xB);
         
         const formulaDiv = document.getElementById('formulaDisplay');
         const formulaSub = document.getElementById('formulaSubtext');
         const hatBtn = document.getElementById('hatBtn');
 
-        if (isHatMode) {
+        if (state.isHatMode) {
             const dir = xB >= 0 ? 1 : -1;
-            vecB.set(dir, 0, 0);
-            currentMagB = 1.0;
+            state.vecB.set(dir, 0, 0); // Force b to unit length
+            state.currentMagB = 1.0;
             hatBtn.classList.add('active');
-            hatBtn.innerText = "Magnitude |B| is now 1";
+            hatBtn.innerText = "Magnitude |b| is now 1";
             formulaDiv.innerHTML = `Length = | <span class="highlight-a">a</span> · <span class="highlight-b">b̂</span> |`;
             formulaSub.innerHTML = `This is simply the dot product with the "Standard Ruler".`;
         } else {
             hatBtn.classList.remove('active');
-            hatBtn.innerText = "Set Magnitude |B| = 1";
+            hatBtn.innerText = "Set Magnitude |b| = 1";
             formulaDiv.innerHTML = `
                 Length = 
                 <div class="fraction">
@@ -167,54 +223,69 @@
                     <div class="bottom">| <span class="highlight-b">b</span> |</div>
                 </div>
             `;
-            formulaSub.innerHTML = `We divide by |b| to neutralize the ruler's length.`;
+            formulaSub.innerHTML = `We divide by |<b>b</b>| to neutralize the ruler's length.`;
         }
 
-        // 3D Update
-        arrowA.setDirection(vecA.clone().normalize());
-        arrowA.setLength(vecA.length());
-        arrowB.setDirection(vecB.clone().normalize());
-        arrowB.setLength(Math.abs(vecB.x));
+        // Update 3D Visuals
+        arrowA.setDirection(state.vecA.clone().normalize());
+        arrowA.setLength(state.vecA.length());
+        
+        arrowB.setDirection(state.vecB.clone().normalize());
+        arrowB.setLength(state.currentMagB);
 
-        // Math
-        const bHat = vecB.clone().normalize();
-        const scalarProj = vecA.dot(bHat);
-        const finalLength = Math.abs(scalarProj);
+        // Calculate Projection
+        const bDir = state.vecB.clone().normalize();
+        const scalarProj = state.vecA.dot(bDir);
+        const projectionLength = Math.abs(scalarProj);
 
-        // Visual Projection
-        if (finalLength > 0.01) {
+        // Update Raw Dot Product display
+        // If hat mode is on, vecB is unit, so dot(a, b) == dot(a, bHat)
+        const dotProductValue = Math.abs(state.vecA.dot(state.vecB));
+
+        // Visual Projection Arrow
+        if (projectionLength > 0.01) {
             arrowProj.visible = true;
-            arrowProj.setDirection(bHat.clone().multiplyScalar(scalarProj >= 0 ? 1 : -1));
-            arrowProj.setLength(finalLength);
-        } else { arrowProj.visible = false; }
+            arrowProj.setDirection(bDir.clone().multiplyScalar(scalarProj >= 0 ? 1 : -1));
+            arrowProj.setLength(projectionLength);
+        } else {
+            arrowProj.visible = false;
+        }
 
-        const tipProj = bHat.clone().multiplyScalar(scalarProj);
-        dottedLine.geometry.setFromPoints([vecA, tipProj]);
+        // Dotted Line from tip of a to the projection point
+        const projPoint = bDir.clone().multiplyScalar(scalarProj);
+        dottedLineGeo.setFromPoints([state.vecA, projPoint]);
         dottedLine.computeLineDistances();
 
-        // UI
-        document.getElementById('finalLength').innerText = finalLength.toFixed(2);
-        document.getElementById('resDot').innerText = Math.abs(vecA.dot(new THREE.Vector3(xB, 0, 0))).toFixed(2);
-        document.getElementById('resMagB').innerText = currentMagB.toFixed(2);
+        // UI Updates
+        document.getElementById('finalLength').innerText = projectionLength.toFixed(2);
+        document.getElementById('resDot').innerText = dotProductValue.toFixed(2);
+        document.getElementById('resMagB').innerText = state.currentMagB.toFixed(2);
     }
 
-    document.getElementById('xA').oninput = update;
-    document.getElementById('xB').oninput = update;
-    document.getElementById('hatBtn').onclick = () => { isHatMode = !isHatMode; update(); };
+    // Input Listeners
+    document.getElementById('xA').addEventListener('input', calculate);
+    document.getElementById('xB').addEventListener('input', calculate);
+    document.getElementById('hatBtn').addEventListener('click', () => {
+        state.isHatMode = !state.isHatMode;
+        calculate();
+    });
 
     window.addEventListener('resize', () => {
-        camera.aspect = container.clientWidth / window.innerHeight;
+        camera.aspect = container.clientWidth / container.clientHeight;
         camera.updateProjectionMatrix();
-        renderer.setSize(container.clientWidth, window.innerHeight);
+        renderer.setSize(container.clientWidth, container.clientHeight);
     });
 
     function animate() {
         requestAnimationFrame(animate);
         controls.update();
+        updateLabels();
         renderer.render(scene, camera);
     }
-    update();
+
+    // Initialize
+    calculate();
     animate();
 </script>
 </body>
-</html>
+</html>```
