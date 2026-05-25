@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Transformation: Replacement Logic</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            max-width: 900px;
+            width: 100%;
+            padding: 35px;
+            border-radius: 15px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+        }
+
+        .header { text-align: center; margin-bottom: 30px; }
+        
+        .graph-box {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #fff;
+            border: 1px solid #e1e4e8;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        svg { overflow: visible; }
+
+        .equation-labels {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            min-height: 1.5em;
+        }
+
+        /* Smooth transitions for all elements */
+        #eqOriginal, #eqNew, #pathBlue, #pathRed, #traceLine, #dotNew, #dotOld, #labelNew, #labelOld {
+            transition: opacity 1.5s ease-in-out;
+            opacity: 0;
+        }
+
+        #eqOriginal { color: #3498db; }
+        #eqNew { color: #e74c3c; }
+
+        .controls {
+            margin-top: 25px;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        button {
+            padding: 12px 28px;
+            background-color: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: 0.2s;
+        }
+
+        button:hover { background-color: #34495e; }
+        .btn-reset { background-color: #95a5a6; }
+
+        .explanation-stepper {
+            margin-top: 25px;
+            padding: 20px;
+            background: #fff9f0;
+            border-left: 5px solid #f39c12;
+            border-radius: 4px;
+            min-height: 100px; /* Increased height to prevent jumping */
+            font-size: 1.15rem;
+            line-height: 1.6;
+        }
+
+        .math-result {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+            border-radius: 8px;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h2>Variable Replacement Logic</h2>
+        <p>Understanding why shifting <b>right</b> uses <b>minus</b> in the algebra.</p>
+    </div>
+
+    <div class="graph-box">
+        <div class="equation-labels">
+            <div id="eqOriginal">Original: \( y = x^2 \)</div>
+            <div id="eqNew">New: \( y = (x - 2)^2 \)</div>
+        </div>
+
+        <svg viewBox="-4 -2 10 12" width="550" height="400" id="graph">
+            <!-- Grid -->
+            <defs>
+                <pattern id="grid" width="1" height="1" patternUnits="userSpaceOnUse">
+                    <path d="M 1 0 L 0 0 0 1" fill="none" stroke="#f0f0f0" stroke-width="0.05"/>
+                </pattern>
+            </defs>
+            <rect x="-4" y="-2" width="10" height="14" fill="url(#grid)" />
+            
+            <!-- Axes -->
+            <line x1="-4" y1="0" x2="6" y2="0" stroke="#888" stroke-width="0.06" />
+            <line x1="0" y1="-2" x2="0" y2="12" stroke="#888" stroke-width="0.06" />
+
+            <!-- Curves -->
+            <path id="pathBlue" fill="none" stroke="#3498db" stroke-width="0.1" />
+            <path id="pathRed" fill="none" stroke="#e74c3c" stroke-width="0.1" />
+
+            <!-- Interaction Logic -->
+            <line id="traceLine" x1="0" y1="0" x2="0" y2="0" stroke="#f39c12" stroke-width="0.07" stroke-dasharray="0.15" />
+            <circle id="dotNew" r="0.2" fill="#e74c3c" />
+            <circle id="dotOld" r="0.2" fill="#3498db" />
+
+            <!-- Dynamic Coords -->
+            <text id="labelNew" x="0" y="0" font-size="0.6" fill="#e74c3c" font-weight="bold"></text>
+            <text id="labelOld" x="0" y="0" font-size="0.6" fill="#3498db" font-weight="bold"></text>
+        </svg>
+    </div>
+
+    <div class="explanation-stepper" id="stepMsg">
+        Click <b>"Start Slow Animation"</b> to begin the step-by-step logic.
+    </div>
+
+    <div class="math-result" id="finalMath">
+        Since the point <span style="color:#3498db">(x - 2, y)</span> must satisfy the original rule <span style="color:#3498db">y = x²</span>, we replace the original \(x\) with \((x - 2)\): <br><br>
+        <span style="font-size: 1.6rem;">\( y = (x - 2)^2 \)</span>
+    </div>
+
+    <div class="controls">
+        <button class="btn-reset" onclick="window.location.reload()">Reset</button>
+        <button id="startBtn" onclick="runAnimation()">Start Slow Animation</button>
+    </div>
+</div>
+
+<script>
+    function generateParabola(h) {
+        let d = "";
+        for (let x = -4; x <= 6; x += 0.1) {
+            let y = Math.pow(x - h, 2);
+            if (y <= 12) {
+                d += (d === "" ? "M " : " L ") + x + " " + (10 - y);
+            }
+        }
+        return d;
+    }
+
+    // Init Curves
+    document.getElementById('pathBlue').setAttribute('d', generateParabola(0));
+    document.getElementById('pathRed').setAttribute('d', generateParabola(2));
+
+    const stepMsg = document.getElementById('stepMsg');
+    const elements = ['pathBlue', 'pathRed', 'dotNew', 'dotOld', 'traceLine', 'labelNew', 'labelOld', 'eqOriginal', 'eqNew'];
+
+    function runAnimation() {
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('startBtn').style.opacity = 0.5;
+
+        // Sequence Timings (Slowed down to 4-5 second intervals)
+        
+        // Step 1: Original Graph
+        setTimeout(() => {
+            stepMsg.innerHTML = "1. We start with the original graph: <b style='color:#3498db'>y = x²</b>. Every point on this blue curve follows that specific rule.";
+            document.getElementById('pathBlue').style.opacity = 1;
+            document.getElementById('eqOriginal').style.opacity = 1;
+            MathJax.Hub.Queue(["Typeset", MathJax.Hub, "stepMsg"]);
+        }, 500);
+
+        // Step 2: Goal
+        setTimeout(() => {
+            stepMsg.innerHTML = "2. We want to move the graph <b>2 units to the right</b>. This creates the red curve. Our goal is to find its new equation.";
+            document.getElementById('pathRed').style.opacity = 1;
+        }, 4500);
+
+        // Step 3: The Point (x,y)
+        setTimeout(() => {
+            stepMsg.innerHTML = "3. Consider a generic point <b style='color:#e74c3c'>(x, y)</b> on our new red graph. We don't know the rule for this point yet.";
+            let x = 4;
+            let y = 4; // (4-2)^2
+            let svgY = 10 - y;
+
+            const dNew = document.getElementById('dotNew');
+            const lNew = document.getElementById('labelNew');
+            dNew.setAttribute('cx', x); dNew.setAttribute('cy', svgY);
+            lNew.setAttribute('x', x + 0.3); lNew.setAttribute('y', svgY - 0.3);
+            lNew.textContent = "(x, y)";
+            
+            dNew.style.opacity = 1;
+            lNew.style.opacity = 1;
+        }, 8500);
+
+        // Step 4: Reach Back
+        setTimeout(() => {
+            stepMsg.innerHTML = "4. Where did this point come from? It was originally 2 units to the left. Its original coordinates were <b style='color:#3498db'>(x - 2, y)</b>.";
+            let x = 4;
+            let y = 4;
+            let svgY = 10 - y;
+
+            const tLine = document.getElementById('traceLine');
+            tLine.setAttribute('x1', x); tLine.setAttribute('y1', svgY);
+            tLine.setAttribute('x2', x - 2); tLine.setAttribute('y2', svgY);
+            tLine.style.opacity = 1;
+
+            const dOld = document.getElementById('dotOld');
+            const lOld = document.getElementById('labelOld');
+            dOld.setAttribute('cx', x - 2); dOld.setAttribute('cy', svgY);
+            lOld.setAttribute('x', (x - 2) - 2.8); lOld.setAttribute('y', svgY - 0.3);
+            lOld.textContent = "(x - 2, y)";
+            
+            dOld.style.opacity = 1;
+            lOld.style.opacity = 1;
+        }, 12500);
+
+        // Step 5: The Logic & Final Equation
+        setTimeout(() => {
+            stepMsg.innerHTML = "5. Since the source point <b style='color:#3498db'>(x - 2, y)</b> sits on the blue curve, it must follow the rule \(y = x^2\). This is why we replace the old \(x\) with \((x - 2)\).";
+            document.getElementById('eqNew').style.opacity = 1;
+            document.getElementById('finalMath').style.display = "block";
+            MathJax.Hub.Queue(["Typeset", MathJax.Hub, "stepMsg"]);
+            MathJax.Hub.Queue(["Typeset", MathJax.Hub, "finalMath"]);
+        }, 17000);
+    }
+</script>
+
+</body>
+</html>

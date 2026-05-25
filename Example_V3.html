@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Reciprocal Sketching: Step-by-Step</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { display: flex; gap: 20px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 1100px; }
+        .sidebar { width: 340px; text-align: left; display: flex; flex-direction: column; }
+        canvas { background: white; border: 2px solid #333; border-radius: 8px; display: block; }
+        .info-box { background: #fff9db; padding: 15px; border-left: 5px solid #f1c40f; margin-bottom: 15px; min-height: 100px; font-size: 14px; line-height: 1.5; border-radius: 4px; color: #856404; }
+        button { 
+            width: 100%; padding: 10px; margin: 3px 0; cursor: pointer; border: 1px solid #ddd; 
+            border-radius: 6px; background: #fff; font-weight: bold; text-align: left; transition: 0.2s; font-size: 13px;
+        }
+        button.active { background: #2c3e50; color: white; border-color: #2c3e50; }
+        /* Style for the exclusion zone toggle */
+        button#btnZone.active { background: #34495e; color: #f1c40f; border-color: #f1c40f; }
+        
+        .trace-controls { margin-top: 15px; display: flex; flex-direction: column; gap: 5px; }
+        button.play-pause { background: #27ae60; color: white; text-align: center; border: none; font-size: 1rem; }
+        button.reset-btn { background: #95a5a6; color: white; text-align: center; border: none; font-size: 0.9rem; }
+        
+        .point-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+        .point-table th, .point-table td { border: 1px solid #ddd; padding: 6px; text-align: center; }
+        .point-table th { background: #f8f9fa; }
+
+        .legend { font-size: 13px; margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; }
+        .pause-alert { color: #e67e22; font-weight: bold; margin-top: 5px; font-size: 12px; text-align: center;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="sidebar">
+        <h2>Sketching y = 1/f(x)</h2>
+        <div id="info" class="info-box">Select Step 1 to begin.</div>
+        
+        <button id="btnZone" onclick="toggleZones()">0. Sign Zones (Exclusion)</button>
+        <button id="btn1" onclick="setStep(1)">1. X-Intercepts</button>
+        <button id="btn2" onclick="setStep(2)">2. Vertical Asymptotes</button>
+        <button id="btn3" onclick="setStep(3)">3. Y-Intercept mapping</button>
+        <button id="btn4" onclick="setStep(4)">4. Vertex mapping (3/2, -4)</button>
+        
+        <table class="point-table">
+            <thead>
+                <tr><th>x</th><th>f(x)</th><th>1/f(x)</th></tr>
+            </thead>
+            <tbody>
+                <tr id="row--1"><td>-1</td><td>6</td><td>1/6</td></tr>
+                <tr id="row-0"><td>0</td><td>2</td><td>1/2</td></tr>
+                <tr id="row-1"><td>1</td><td>0</td><td>Undef.</td></tr>
+                <tr id="row-1_5"><td>3/2</td><td>-1/4</td><td>-4</td></tr>
+                <tr id="row-2"><td>2</td><td>0</td><td>Undef.</td></tr>
+                <tr id="row-3"><td>3</td><td>2</td><td>1/2</td></tr>
+                <tr id="row-4"><td>4</td><td>6</td><td>1/6</td></tr>
+            </tbody>
+        </table>
+
+        <div class="trace-controls">
+            <button class="play-pause" id="traceBtn" onclick="toggleTrace()">▶ Start Trace Animation</button>
+            <div id="pauseMsg" class="pause-alert" style="visibility: hidden;">Paused for explanation. Click Play.</div>
+            <button class="reset-btn" onclick="resetTrace()">Reset Everything</button>
+        </div>
+
+        <div class="legend">
+            <span style="color:#3498db; font-weight:bold">──</span> f(x) = x² - 3x + 2<br>
+            <span style="color:#e74c3c; font-weight:bold">──</span> y = 1/f(x)
+        </div>
+    </div>
+
+    <canvas id="graphCanvas" width="650" height="650"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('graphCanvas');
+    const ctx = canvas.getContext('2d');
+    const info = document.getElementById('info');
+    const traceBtn = document.getElementById('traceBtn');
+    const pauseMsg = document.getElementById('pauseMsg');
+
+    const centerX = 200; 
+    const centerY = 280; 
+    const scaleX = 90;   
+    const scaleY = 32;   
+
+    let activeStep = 0;
+    let isTracing = false;
+    let showZones = false;
+    let traceX = -2.5;
+    let animationId = null;
+    
+    const pausePoints = [-1, 0, 1, 1.5, 2];
+    let pauseIndex = 0;
+
+    const f = (x) => x*x - 3*x + 2;
+
+    function drawExclusionZones() {
+        if (!showZones) return;
+        
+        ctx.fillStyle = "rgba(44, 62, 80, 0.15)"; // Darken color
+        
+        // Region x < 1: f(x) is positive, so 1/f(x) is positive. Darken y < 0.
+        // x range: 0 to (centerX + 1*scaleX). y range: centerY to bottom of canvas.
+        ctx.fillRect(0, centerY, centerX + 1*scaleX, canvas.height - centerY);
+
+        // Region 1 < x < 2: f(x) is negative, so 1/f(x) is negative. Darken y > 0.
+        // x range: (centerX + 1*scaleX) to (centerX + 2*scaleX). y range: 0 to centerY.
+        ctx.fillRect(centerX + 1*scaleX, 0, 1*scaleX, centerY);
+
+        // Region x > 2: f(x) is positive, so 1/f(x) is positive. Darken y < 0.
+        // x range: (centerX + 2*scaleX) to right side. y range: centerY to bottom.
+        let startX3 = centerX + 2*scaleX;
+        ctx.fillRect(startX3, centerY, canvas.width - startX3, canvas.height - centerY);
+    }
+
+    function drawScene(currentTraceX = null) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 1. Grid & Axes
+        ctx.strokeStyle = "#f0f0f0";
+        ctx.lineWidth = 1;
+        for(let i=-10; i<=10; i++) {
+            ctx.beginPath(); ctx.moveTo(centerX + i*scaleX, 0); ctx.lineTo(centerX + i*scaleX, 650); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, centerY + i*scaleY); ctx.lineTo(650, centerY + i*scaleY); ctx.stroke();
+        }
+
+        // 1.5 Draw Exclusion Zones (Drawn early so they are behind the lines)
+        drawExclusionZones();
+
+        ctx.strokeStyle = "#333";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, centerY); ctx.lineTo(650, centerY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(centerX, 0); ctx.lineTo(centerX, 650); ctx.stroke();
+
+        // 2. Original Quadratic (Dashed Blue)
+        ctx.beginPath();
+        ctx.strokeStyle = "#3498db";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 5]);
+        for (let px = 0; px <= 650; px++) {
+            let x = (px - centerX) / scaleX;
+            let py = centerY - (f(x) * scaleY);
+            if (px === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Graph Label
+        ctx.fillStyle = "#3498db";
+        ctx.font = "bold 15px Arial";
+        let fLabelX = centerX + 3.2 * scaleX;
+        let fLabelY = centerY - f(3.2) * scaleY;
+        ctx.textAlign = "left";
+        ctx.shadowColor = "white"; ctx.shadowBlur = 4;
+        ctx.fillText("y = x² - 3x + 2", fLabelX, fLabelY - 10);
+        ctx.shadowBlur = 0; 
+
+        if (activeStep >= 1) {
+            markPoint(1, 0, "(1, 0)", "#3498db", -15, 18);
+            markPoint(2, 0, "(2, 0)", "#3498db", 5, 18);
+        }
+
+        if (activeStep >= 2) {
+            ctx.strokeStyle = "#7f8c8d";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([8, 4]);
+            [1, 2].forEach(ax => {
+                ctx.beginPath(); ctx.moveTo(centerX + ax*scaleX, 0); ctx.lineTo(centerX + ax*scaleX, 650); ctx.stroke();
+                ctx.fillStyle = "#7f8c8d";
+                ctx.font = "italic 12px Arial";
+                ctx.fillText(`x = ${ax}`, centerX + ax*scaleX + 5, 25);
+            });
+            ctx.setLineDash([]);
+        }
+
+        if (activeStep >= 3) {
+            markPoint(0, 2, "(0, 2)", "#3498db", -40, 5);
+            markPoint(0, 0.5, "(0, 1/2)", "#e74c3c", 8, -5);
+        }
+        
+        if (activeStep >= 4) {
+            markPoint(1.5, -0.25, "(3/2, -1/4)", "#3498db", -35, 18);
+            markPoint(1.5, -4, "(3/2, -4)", "#e74c3c", -30, -10);
+        }
+
+        if (currentTraceX !== null) {
+            drawReciprocal(currentTraceX);
+            const transientPts = [
+                {x: -1, y: 6, ry: "1/6"}, 
+                {x: 3, y: 2, ry: "1/2"}, 
+                {x: 4, y: 6, ry: "1/6"}
+            ];
+            transientPts.forEach(p => {
+                if (currentTraceX >= p.x) {
+                    markPoint(p.x, p.y, `(${p.x}, ${p.y})`, "#3498db", 8, 5);
+                    markPoint(p.x, 1/p.y, `(${p.x}, ${p.ry})`, "#e74c3c", 8, -8);
+                }
+            });
+        }
+    }
+
+    function toggleZones() {
+        showZones = !showZones;
+        document.getElementById('btnZone').className = showZones ? "active" : "";
+        if (showZones) {
+            info.innerHTML = "<b>Exclusion Zones:</b> Since 1/f(x) must have the same sign as f(x), we darken regions where the graph cannot exist.";
+        }
+        drawScene(isTracing || traceX > -2.5 ? traceX : null);
+    }
+
+    function drawReciprocal(limitX) {
+        ctx.beginPath();
+        ctx.strokeStyle = "#e74c3c";
+        ctx.lineWidth = 3;
+        let started = false;
+
+        for (let px = 0; px <= 650; px += 0.5) {
+            let x = (px - centerX) / scaleX;
+            if (x > limitX) break;
+            let val = f(x);
+            if (Math.abs(val) < 0.015) {
+                ctx.stroke(); ctx.beginPath(); started = false; continue;
+            }
+            let py = centerY - ((1/val) * scaleY);
+            if (py < -1200 || py > 1500) { started = false; continue; }
+            if (!started) { ctx.moveTo(px, py); started = true; } 
+            else { ctx.lineTo(px, py); }
+        }
+        ctx.stroke();
+
+        let tipY = 1/f(limitX);
+        if (Math.abs(tipY) < 50) {
+            ctx.fillStyle = "#e74c3c";
+            ctx.beginPath(); ctx.arc(centerX + limitX*scaleX, centerY - tipY*scaleY, 5, 0, 7); ctx.fill();
+        }
+    }
+
+    function markPoint(x, y, label, color, xOff, yOff) {
+        let px = centerX + x * scaleX;
+        let py = centerY - y * scaleY;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2); ctx.fill();
+        if (label !== "") {
+            ctx.fillStyle = "#333";
+            ctx.font = "bold 11px Arial";
+            ctx.fillText(label, px + xOff, py + yOff);
+        }
+    }
+
+    function setStep(step) {
+        cancelAnimationFrame(animationId);
+        isTracing = false;
+        traceX = -2.5;
+        pauseIndex = 0;
+        traceBtn.innerText = "▶ Start Trace Animation";
+        traceBtn.style.background = "#27ae60";
+        pauseMsg.style.visibility = "hidden";
+        
+        activeStep = step;
+        for(let i=1; i<=4; i++) document.getElementById('btn'+i).className = (i===step) ? "active" : "";
+        
+        if (step === 1) info.innerHTML = "<b>Step 1:</b> Find where f(x) is 0. These x-intercepts determine the asymptotes.";
+        if (step === 2) info.innerHTML = "<b>Step 2:</b> Draw vertical asymptotes at x=1 and x=2.";
+        if (step === 3) info.innerHTML = "<b>Step 3:</b> The y-intercept f(0)=2 maps to its reciprocal 1/2.";
+        if (step === 4) info.innerHTML = "<b>Step 4:</b> The vertex (3/2, -1/4) maps to its reciprocal -4.";
+        
+        drawScene(null);
+    }
+
+    function toggleTrace() {
+        if (isTracing) {
+            isTracing = false;
+            cancelAnimationFrame(animationId);
+            traceBtn.innerText = "▶ Resume Trace";
+            traceBtn.style.background = "#27ae60";
+        } else {
+            if (activeStep < 4) activeStep = 4; 
+            isTracing = true;
+            pauseMsg.style.visibility = "hidden";
+            traceBtn.innerText = "⏸ Pause Trace";
+            traceBtn.style.background = "#e67e22";
+            animate();
+        }
+    }
+
+    function resetTrace() {
+        cancelAnimationFrame(animationId);
+        isTracing = false;
+        showZones = false;
+        traceX = -2.5;
+        pauseIndex = 0;
+        activeStep = 0;
+        for(let i=1; i<=4; i++) document.getElementById('btn'+i).className = "";
+        document.getElementById('btnZone').className = "";
+        traceBtn.innerText = "▶ Start Trace Animation";
+        traceBtn.style.background = "#27ae60";
+        pauseMsg.style.visibility = "hidden";
+        info.innerHTML = "Select Step 1 to begin.";
+        document.querySelectorAll('tr').forEach(r => r.style.background = "none");
+        drawScene(null);
+    }
+
+    function animate() {
+        if (!isTracing) return;
+
+        if (pauseIndex < pausePoints.length) {
+            let target = pausePoints[pauseIndex];
+            if (traceX >= target) {
+                traceX = target; 
+                drawScene(traceX);
+                highlightRow(target);
+                isTracing = false;
+                pauseIndex++;
+                traceBtn.innerText = "▶ Continue Tracing";
+                traceBtn.style.background = "#27ae60";
+                pauseMsg.style.visibility = "visible";
+                return;
+            }
+        }
+
+        drawScene(traceX);
+        highlightRow(traceX);
+        traceX += 0.008; 
+
+        if (traceX <= 5) {
+            animationId = requestAnimationFrame(animate);
+        } else {
+            isTracing = false;
+            traceBtn.innerText = "▶ Restart Trace";
+            traceX = -2.5;
+            pauseIndex = 0;
+        }
+    }
+
+    function highlightRow(x) {
+        document.querySelectorAll('tr').forEach(r => r.style.background = "none");
+        let key = (Math.abs(x - 1.5) < 0.1) ? "1_5" : Math.round(x);
+        let el = document.getElementById("row-" + key);
+        if (el && Math.abs(x - parseFloat(key === "1_5" ? 1.5 : key)) < 0.1) {
+            el.style.background = "#ffeaa7";
+        }
+    }
+
+    window.onload = () => drawScene(null);
+</script>
+</body>
+</html>
