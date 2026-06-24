@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reciprocal Feature Mapping</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f1f5f9;
+            color: #1e293b;
+            padding: 20px;
+        }
+
+        .header-box {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            max-width: 850px;
+            width: 100%;
+            margin-bottom: 20px;
+            border-top: 6px solid #10b981;
+        }
+
+        .mode-selector {
+            margin: 15px 0;
+            padding: 12px;
+            font-size: 1rem;
+            border-radius: 8px;
+            border: 2px solid #cbd5e1;
+            width: 100%;
+            cursor: pointer;
+            background-color: #fff;
+            font-weight: 600;
+        }
+
+        .container {
+            position: relative;
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        canvas {
+            border: 1px solid #e2e8f0;
+            display: block;
+            background-color: #ffffff;
+            cursor: crosshair;
+        }
+
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        button {
+            padding: 10px 22px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        #startBtn { background: #10b981; color: white; }
+        #stopBtn { background: #94a3b8; color: white; }
+        #resetBtn { background: #e2e8f0; color: #475569; }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            justify-content: center;
+        }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .box { width: 12px; height: 12px; border-radius: 2px; }
+
+        .logic-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            max-width: 850px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .logic-card h3 { color: #10b981; margin-top: 0; }
+
+        #tooltip {
+            position: absolute;
+            background: rgba(30, 41, 59, 0.95);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            pointer-events: none;
+            display: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-box">
+        <label for="modeSelect" style="font-weight: bold; color: #1e293b;">Select Mapping Objective:</label>
+        <select id="modeSelect" class="mode-selector">
+            <option value="intToAsy">Why x-intercept in y = f(x) becomes a Vertical Asymptote in y = 1/f(x)</option>
+            <option value="asyToInt">Why Vertical Asymptote in y = f(x) becomes an x-intercept in y = 1/f(x)</option>
+            <option value="oblToHoriz">Why Oblique Asymptote in y = f(x) becomes a Horizontal Asymptote in y = 1/f(x)</option>
+        </select>
+        
+        <div id="descriptionText"></div>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="box" style="background: #3b82f6;"></div> y = f(x) (Original)</div>
+        <div class="legend-item"><div class="box" style="background: #10b981;"></div> y = 1/f(x) (Reciprocal)</div>
+        <div class="legend-item"><div class="box" style="background: #8b5cf6;"></div> Mapping Trace</div>
+    </div>
+
+    <div class="container">
+        <div id="tooltip"></div>
+        <canvas id="graphCanvas" width="550" height="550"></canvas>
+    </div>
+
+    <div class="controls">
+        <button id="startBtn">▶ Trace Mapping</button>
+        <button id="stopBtn">Stop</button>
+        <button id="resetBtn">Reset</button>
+        <div id="coordDisplay" style="font-family: monospace; font-weight: bold; margin-left: 10px;">x: -10.00, y: ...</div>
+    </div>
+
+    <div class="logic-card">
+        <h3>Feature Logic</h3>
+        <div id="logicNote" style="font-size: 0.95rem;"></div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('graphCanvas');
+    const ctx = canvas.getContext('2d');
+    const modeSelect = document.getElementById('modeSelect');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const tooltip = document.getElementById('tooltip');
+    const coordDisplay = document.getElementById('coordDisplay');
+
+    const width = 550, height = 550, centerX = 275, centerY = 275, scale = 25;
+    const mappingPoints = [-10, -4, -2, -1, -0.5, 0.5, 1, 2, 4, 10];
+    
+    let animX = -10.5;
+    let isRunning = false;
+    let pathHistory = [];
+    let milestoneRecords = [];
+    let rafId;
+
+    const modes = {
+        intToAsy: {
+            origFunc: (x) => x,
+            recipFunc: (x) => 1/x,
+            label: "y = x",
+            desc: "<b>Mapping:</b> f(x) = 0 → 1/f(x) is undefined (±∞).",
+            logic: "As y = f(x) approaches the x-axis (y=0), the reciprocal y = 1/f(x) must grow infinitely. This creates the <b>Vertical Asymptote</b> at the location of the original intercept.",
+            asyLabel: "V.A. x = 0"
+        },
+        asyToInt: {
+            origFunc: (x) => 1/x,
+            recipFunc: (x) => x,
+            label: "y = 1/x",
+            desc: "<b>Mapping:</b> f(x) → ±∞ → 1/f(x) → 0.",
+            logic: "The Vertical Asymptote in y = f(x) means y grows without bound. In y = 1/f(x), this large value in the denominator forces the curve toward 0. <i>Note the 'hole' at (0,0) because f(0) is undefined.</i>",
+            asyLabel: "" 
+        },
+        oblToHoriz: {
+            origFunc: (x) => x + 1 + 1/x,
+            recipFunc: (x) => 1 / (x + 1 + 1/x),
+            label: "y = x + 1 + 1/x",
+            desc: "<b>Mapping:</b> f(x) → ±∞ (Slanted) → 1/f(x) → 0 (Horizontal).",
+            logic: "As y = f(x) grows infinitely along the <b>Oblique Asymptote</b> (y = x + 1), the value of y = 1/f(x) shrinks toward 0. Even with infinite slanted growth, the reciprocal approachs the <b>Horizontal Asymptote</b> y = 0.",
+            asyLabel: "H.A. y = 0",
+            oblLabel: "y = x + 1"
+        }
+    };
+
+    function toScreen(x, y) {
+        return { x: centerX + x * scale, y: centerY - y * scale };
+    }
+
+    function drawAxes() {
+        ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0,centerY); ctx.lineTo(width,centerY); 
+        ctx.moveTo(centerX,0); ctx.lineTo(centerX,height); ctx.stroke();
+    }
+
+    function render() {
+        ctx.clearRect(0,0,width,height);
+        drawAxes();
+        const m = modes[modeSelect.value];
+
+        // 1. Draw Oblique Asymptote for Mode 3
+        if (modeSelect.value === 'oblToHoriz') {
+            ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1; ctx.setLineDash([2, 2]);
+            ctx.beginPath();
+            let p1 = toScreen(-12, -11), p2 = toScreen(11, 12);
+            ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#64748b'; ctx.font = "italic 12px Arial";
+            ctx.fillText(m.oblLabel, p2.x - 60, p2.y + 20);
+        }
+
+        // 2. Draw Original Function (Blue Dotted)
+        ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        let first = true;
+        for (let x = -12; x <= 12; x += 0.1) {
+            if (modeSelect.value !== 'intToAsy' && Math.abs(x) < 0.1) {
+                ctx.stroke(); ctx.beginPath(); first = true; continue;
+            }
+            let y = m.origFunc(x);
+            let p = toScreen(x, y);
+            if (p.y < -1200 || p.y > height + 1200) { first = true; continue; }
+            if (first) { ctx.moveTo(p.x, p.y); first = false; }
+            else { ctx.lineTo(p.x, p.y); }
+        }
+        ctx.stroke(); ctx.setLineDash([]);
+
+        // Label Original
+        ctx.fillStyle = '#3b82f6'; ctx.font = "italic bold 14px Arial";
+        let labelPos = toScreen(5.5, m.origFunc(5.5));
+        ctx.fillText(m.label, labelPos.x + 10, labelPos.y - 10);
+
+        // 3. Draw Reciprocal Curve (Green Solid)
+        if (pathHistory.length > 1) {
+            ctx.strokeStyle = '#10b981'; ctx.lineWidth = 3;
+            ctx.beginPath();
+            let firstR = true;
+            for (let i = 0; i < pathHistory.length; i++) {
+                const pt = pathHistory[i];
+                const pos = toScreen(pt.x, pt.y);
+                if (i > 0 && Math.abs(pt.y - pathHistory[i-1].y) > 20) {
+                    ctx.stroke(); ctx.beginPath(); firstR = true;
+                }
+                if (firstR) { ctx.moveTo(pos.x, pos.y); firstR = false; }
+                else { ctx.lineTo(pos.x, pos.y); }
+            }
+            ctx.stroke();
+        }
+
+        // 4. Milestone Pairs
+        milestoneRecords.forEach(rec => {
+            const pO = toScreen(rec.x, rec.yOrig);
+            const pR = toScreen(rec.x, rec.yRecip);
+            ctx.strokeStyle = '#8b5cf6'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(pO.x, pO.y); ctx.lineTo(pR.x, pR.y); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#3b82f6'; ctx.beginPath(); ctx.arc(pO.x, pO.y, 4, 0, 7); ctx.fill();
+            ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.arc(pR.x, pR.y, 5, 0, 7); ctx.fill();
+            ctx.strokeStyle = 'white'; ctx.stroke();
+        });
+
+        // 5. Hole at (0,0) for Objectives 2 and 3
+        if ((modeSelect.value === 'asyToInt' || modeSelect.value === 'oblToHoriz') && animX > 0) {
+            const holePos = toScreen(0,0);
+            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(holePos.x, holePos.y, 5, 0, 7); ctx.fill();
+            ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(holePos.x, holePos.y, 5, 0, 7); ctx.stroke();
+        }
+
+        // 6. Current Tracer
+        if (isRunning && pathHistory.length > 0) {
+            const last = pathHistory[pathHistory.length-1];
+            const pO = toScreen(last.x, m.origFunc(last.x));
+            const pR = toScreen(last.x, last.y);
+            ctx.strokeStyle = '#8b5cf6'; ctx.setLineDash([2,2]);
+            ctx.beginPath(); ctx.moveTo(pO.x, pO.y); ctx.lineTo(pR.x, pR.y); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#1e293b'; ctx.beginPath(); ctx.arc(pR.x, pR.y, 5, 0, 7); ctx.fill();
+            coordDisplay.innerHTML = `x: ${last.x.toFixed(2)}, f(x): ${m.origFunc(last.x).toFixed(2)}, 1/f(x): ${Math.abs(last.y) > 40 ? '±∞' : last.y.toFixed(2)}`;
+        }
+
+        // 7. Labels for Asymptotes
+        if (animX > -0.5 && m.asyLabel) {
+            ctx.save();
+            ctx.font = "bold 12px Arial"; ctx.fillStyle = "#ef4444"; ctx.strokeStyle = "#ef4444";
+            ctx.setLineDash([5, 5]);
+            if (modeSelect.value === 'intToAsy') {
+                ctx.beginPath(); ctx.moveTo(centerX, 0); ctx.lineTo(centerX, height); ctx.stroke();
+                ctx.fillText(m.asyLabel, centerX + 8, 30);
+            } else if (modeSelect.value === 'oblToHoriz' && animX > 6) {
+                ctx.beginPath(); ctx.moveTo(0, centerY); ctx.lineTo(width, centerY); ctx.stroke();
+                ctx.fillText(m.asyLabel, 15, centerY - 10);
+            }
+            ctx.restore();
+        }
+    }
+
+    function animate() {
+        if (!isRunning) return;
+        let step = (Math.abs(animX) < 1.5) ? 0.015 : 0.04;
+        animX += step;
+        if (animX > -0.01 && animX < 0.01 && modeSelect.value !== 'oblToHoriz') animX = 0.01;
+
+        if (animX <= 11) {
+            const m = modes[modeSelect.value];
+            pathHistory.push({ x: animX, y: m.recipFunc(animX) });
+            mappingPoints.forEach(targetX => {
+                if (animX >= targetX && !milestoneRecords.find(p => p.x === targetX)) {
+                    milestoneRecords.push({ x: targetX, yOrig: m.origFunc(targetX), yRecip: m.recipFunc(targetX) });
+                }
+            });
+            render();
+            rafId = requestAnimationFrame(animate);
+        } else { isRunning = false; }
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        let found = false;
+        milestoneRecords.forEach(rec => {
+            const pO = toScreen(rec.x, rec.yOrig), pR = toScreen(rec.x, rec.yRecip);
+            if (Math.sqrt((mx-pO.x)**2+(my-pO.y)**2) < 10 || Math.sqrt((mx-pR.x)**2+(my-pR.y)**2) < 10) {
+                tooltip.style.display = 'block'; tooltip.style.left = (mx + 15) + 'px'; tooltip.style.top = (my - 15) + 'px';
+                tooltip.innerHTML = `<div style="font-weight:bold;color:#cbd5e1">x = ${rec.x.toFixed(1)}</div>
+                                     <span style="color:#60a5fa">f(x) = ${rec.yOrig.toFixed(2)}</span><br>
+                                     <span style="color:#34d399">1/f(x) = ${rec.yRecip.toFixed(2)}</span>`;
+                found = true;
+            }
+        });
+        if (!found) tooltip.style.display = 'none';
+    });
+
+    function updateUI() {
+        const m = modes[modeSelect.value];
+        document.getElementById('descriptionText').innerHTML = `<p>${m.desc}</p>`;
+        document.getElementById('logicNote').innerHTML = `<p>${m.logic}</p>`;
+        reset();
+    }
+
+    function reset() {
+        isRunning = false; cancelAnimationFrame(rafId);
+        animX = -10.5; pathHistory = []; milestoneRecords = [];
+        coordDisplay.innerHTML = "x: -10.00, y: ...";
+        render();
+    }
+
+    startBtn.onclick = () => { if(!isRunning) { if(animX >= 10) reset(); isRunning = true; animate(); } };
+    stopBtn.onclick = () => { isRunning = false; cancelAnimationFrame(rafId); };
+    resetBtn.onclick = reset;
+    modeSelect.onchange = updateUI;
+    updateUI();
+</script>
+</body>
+</html>
